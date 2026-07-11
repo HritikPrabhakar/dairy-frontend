@@ -62,7 +62,7 @@ export const routes: Routes = [
  {
   path: 'profile',
   loadComponent: () =>
-    import('./pages/Profile/profile.component').then(m => m.ProfileComponent)
+    import('./pages/profile/profile.component').then(m => m.ProfileComponent)
 },
 {
     path: 'ai',
