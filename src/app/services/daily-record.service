@@ -1,0 +1,30 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { DailyRecord, BulkMarkDto } from '../models/daily-record.model';
+
+@Injectable({ providedIn: 'root' })
+export class DailyRecordService {
+  private url = `${environment.apiUrl}/DailyRecord`;
+  constructor(private http: HttpClient) {}
+
+  getByDate(date: string): Observable<DailyRecord[]> {
+    return this.http.get<DailyRecord[]>(`${this.url}/date/${date}`);
+  }
+  getByCustomer(id: number, from?: string, to?: string): Observable<DailyRecord[]> {
+    let params = '';
+    if (from) params += `?from=${from}`;
+    if (to)   params += `${params ? '&' : '?'}to=${to}`;
+    return this.http.get<DailyRecord[]>(`${this.url}/customer/${id}${params}`);
+  }
+  getMonthly(customerId: number, year: number, month: number): Observable<DailyRecord[]> {
+    return this.http.get<DailyRecord[]>(`${this.url}/customer/${customerId}/monthly/${year}/${month}`);
+  }
+  bulkMark(dto: BulkMarkDto): Observable<any> {
+    return this.http.post(`${this.url}/bulk-mark`, dto);
+  }
+  togglePayment(id: number): Observable<any> {
+    return this.http.patch(`${this.url}/${id}/toggle-payment`, {});
+  }
+}
