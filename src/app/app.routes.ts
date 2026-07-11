@@ -58,10 +58,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/bills/bills.component').then(m => m.BillsComponent)
       },
-      {
+      
+ {
   path: 'profile',
   loadComponent: () =>
-    import('./pages/profile/profile.component').then(m => m.ProfileComponent)
+    import('./pages/Profile/profile.component').then(m => m.ProfileComponent)
 },
 {
     path: 'ai',
