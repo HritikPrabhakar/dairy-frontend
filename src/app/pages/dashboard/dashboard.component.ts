@@ -162,7 +162,7 @@ interface Dashboard {
                   <td><strong class="amount">₹{{ s.totalAmount | number:'1.0-0' }}</strong></td>
                   <td><span class="badge" [class.bs]="s.isPaid" [class.bd]="!s.isPaid">{{ s.isPaid ? 'Paid' : 'Pending' }}</span></td>
                   <!-- 🔥 FIX: Changed s.createdAt back to s.saleDate with proper IST formatting -->
-                  <td class="time-txt">{{ s.saleDate | date:'yyyy MMM dd, hh:mm a':'+0530' }}</td>
+                  <td class="time-col">{{ s.saleDate | date:'shortTime':'+0530' }}</td>
                 </tr>
               </tbody>
             </table>

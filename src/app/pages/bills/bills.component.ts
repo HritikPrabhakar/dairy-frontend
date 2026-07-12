@@ -438,7 +438,7 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
                 <td><span class="rank">{{ i+1 }}</span></td>
                 <td>
                   <div class="cname">{{ b.customerName }}</div>
-                  <div class="csub">{{ b.customerPhone }}</div>
+                  <div class="csub">{{ b.customerAddress }}</div>
                 </td>
                 <td><strong class="month-txt">{{ b.billMonth | date:'MMM yyyy' }}</strong></td>
                 <td class="hide-xs"><span class="item-badge">{{ b.items.length }} products</span></td>
