@@ -367,6 +367,8 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
+// NOTE: Verify this relative path matches your folder structure!
+import { PaginationComponent } from '../../pagination/pagination.component';
 
 interface Bill { id: number; customerId: number; customerName: string; customerPhone: string; customerAddress: string; billMonth: string; generatedAt: string; totalAmount: number; isPaid: boolean; items: BillItem[]; }
 interface BillItem { productName: string; totalQuantity: number; unit: string; pricePerUnit: number; totalPrice: number; }
@@ -375,7 +377,7 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
 @Component({
   selector: 'app-bills',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, PaginationComponent],
   template: `
     <div class="toast-container">
       <div *ngFor="let t of toasts" class="toast" [class]="'toast-'+t.type">{{ t.msg }}</div>
@@ -400,7 +402,7 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
         <div class="search-wrap">
           <span class="search-icon">🔍</span>
           <input type="text" class="form-control pl-icon" placeholder="Search customer name..."
-                 [(ngModel)]="search" (input)="applyFilter()" />
+                 [(ngModel)]="search" (ngModelChange)="applyFilter()" />
         </div>
         
         <select class="form-control sel-status" [(ngModel)]="filterPaid" (change)="applyFilter()">
@@ -410,16 +412,16 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
         </select>
         
         <div class="summary-pills">
-          <span class="pill pill-p" title="Total Amount">💰 ₹{{ totalAmt | number:'1.0-0' }}</span>
-          <span class="pill pill-r" title="Pending Amount" *ngIf="pendingAmt > 0">🔴 ₹{{ pendingAmt | number:'1.0-0' }}</span>
+          <span class="pill pill-p" title="Total Amount">💰 ₹{{ totalAmt | number:'1.0-0' }} (Page)</span>
+          <span class="pill pill-r" title="Pending Amount" *ngIf="pendingAmt > 0">🔴 ₹{{ pendingAmt | number:'1.0-0' }} (Page)</span>
         </div>
       </div>
 
       <div class="card mt">
         <div *ngIf="loading" class="empty state-msg">⏳ Loading bills...</div>
-        <div *ngIf="!loading && filtered.length === 0" class="empty state-msg">No bills found. Generate a bill first.</div>
+        <div *ngIf="!loading && bills.length === 0" class="empty state-msg">No bills found. Generate a bill first.</div>
         
-        <div class="table-wrap" *ngIf="!loading && filtered.length > 0">
+        <div class="table-wrap" *ngIf="!loading && bills.length > 0">
           <table>
             <thead>
               <tr>
@@ -434,8 +436,9 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
               </tr>
             </thead>
             <tbody>
-              <tr *ngFor="let b of filtered; let i=index" class="hover-row" [style.background]="b.isPaid ? '#f8fafc' : '#fffbeb'">
-                <td><span class="rank">{{ i+1 }}</span></td>
+              <tr *ngFor="let b of bills; let i=index" class="hover-row" [style.background]="b.isPaid ? '#f8fafc' : '#fffbeb'">
+                <!-- Calculate correct sequence number based on page -->
+                <td><span class="rank">{{ (page - 1) * pageSize + i + 1 }}</span></td>
                 <td>
                   <div class="cname">{{ b.customerName }}</div>
                   <div class="csub">{{ b.customerAddress }}</div>
@@ -461,6 +464,16 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Component Rendered Here -->
+        <div class="pagination-wrapper" *ngIf="!loading && totalPages > 1">
+          <app-pagination 
+            [currentPage]="page" 
+            [totalPages]="totalPages" 
+            [totalCount]="totalCount"
+            (pageChange)="onPageChange($event)">
+          </app-pagination>
         </div>
       </div>
     </div>
@@ -681,6 +694,15 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
 
     .state-msg { padding: 3rem 1rem; font-weight: 500; font-size: 0.95rem; text-align: center; color: #64748b; }
 
+    /* Pagination */
+    .pagination-wrapper {
+      padding: 1rem 1rem 0 1rem;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 0.5rem;
+    }
+
     /* Modals */
     .overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
     .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
@@ -779,7 +801,6 @@ interface Customer { id: number; name: string; phone: string; isActive: boolean;
 })
 export class BillsComponent implements OnInit {
   bills: Bill[] = [];
-  filtered: Bill[] = [];
   customers: Customer[] = [];
   
   loading = false; 
@@ -792,12 +813,19 @@ export class BillsComponent implements OnInit {
   filterPaid = 'all';
   toasts: { msg: string; type: string }[] = [];
 
+  // Pagination State
+  page = 1;
+  pageSize = 10;
+  totalCount = 0;
+  totalPages = 0;
+
   months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   years  = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
   genForm = { customerId: 0, month: new Date().getMonth() + 1, year: new Date().getFullYear() };
 
-  get totalAmt()   { return this.filtered.reduce((s, b) => s + b.totalAmount, 0); }
-  get pendingAmt() { return this.filtered.filter(b => !b.isPaid).reduce((s, b) => s + b.totalAmount, 0); }
+  // Note: These calculations reflect the data on the CURRENT PAGE only
+  get totalAmt()   { return this.bills.reduce((s, b) => s + b.totalAmount, 0); }
+  get pendingAmt() { return this.bills.filter(b => !b.isPaid).reduce((s, b) => s + b.totalAmount, 0); }
 
   constructor(private http: HttpClient) {}
 
@@ -808,10 +836,24 @@ export class BillsComponent implements OnInit {
 
   load() {
     this.loading = true;
-    this.http.get<Bill[]>(`${environment.apiUrl}/Bill`).subscribe({
-      next: (d) => { 
-        this.bills = d; 
-        this.applyFilter(); 
+    
+    // Construct base URL with pagination
+    let url = `${environment.apiUrl}/Bill?page=${this.page}&pageSize=${this.pageSize}`;
+    
+    // Append filters to API request
+    if (this.search) {
+      url += `&search=${encodeURIComponent(this.search)}`;
+    }
+    if (this.filterPaid !== 'all') {
+      url += `&status=${this.filterPaid}`;
+    }
+
+    this.http.get<any>(url).subscribe({
+      next: (res) => { 
+        // Mapping paginated server response correctly
+        this.bills = res.data || []; 
+        this.totalCount = res.totalCount || 0;
+        this.totalPages = res.totalPages || 0;
         this.loading = false; 
       },
       error: () => { 
@@ -821,24 +863,22 @@ export class BillsComponent implements OnInit {
     });
   }
 
+  // Called when PaginationComponent emits a page change
+  onPageChange(p: number) {
+    this.page = p;
+    this.load();
+  }
+
+  // Called when search input or status dropdown changes
+  applyFilter() {
+    this.page = 1; // Reset to page 1 whenever filters change
+    this.load();   // Reload from server
+  }
+
   loadCustomers() {
     this.http.get<Customer[]>(`${environment.apiUrl}/Customer`).subscribe({
       next: (d) => this.customers = d.filter(c => c.isActive)
     });
-  }
-
-  applyFilter() {
-    let list = [...this.bills];
-    
-    if (this.search) {
-      const q = this.search.toLowerCase();
-      list = list.filter(b => b.customerName.toLowerCase().includes(q));
-    }
-    
-    if (this.filterPaid === 'paid')    list = list.filter(b => b.isPaid);
-    if (this.filterPaid === 'pending') list = list.filter(b => !b.isPaid);
-    
-    this.filtered = list;
   }
 
   openGen() {
@@ -872,7 +912,7 @@ export class BillsComponent implements OnInit {
       next: () => { 
         this.generating = false; 
         this.closeGen(); 
-        this.load(); 
+        this.load(); // Refresh current page to see new bill
         this.toast('Bill generated successfully!', 'success'); 
       },
       error: () => { 
@@ -885,7 +925,7 @@ export class BillsComponent implements OnInit {
   markPaid(b: Bill) {
     this.http.patch(`${environment.apiUrl}/Bill/${b.id}/mark-paid`, {}).subscribe({
       next: () => { 
-        this.load(); 
+        this.load(); // Refresh the list
         this.toast('Bill marked as paid!', 'success'); 
       },
       error: () => this.toast('Failed to update status.', 'error')

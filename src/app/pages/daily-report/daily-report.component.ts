@@ -321,11 +321,13 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { RouterLink } from '@angular/router';
 import { environment } from '../../../environments/environment';
+// NOTE: Verify this relative path matches your folder structure!
+import { PaginationComponent } from '../../pagination/pagination.component';
 
 @Component({
   selector: 'app-daily-report',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, PaginationComponent],
   template: `
     <div class="toast-container">
       <div *ngFor="let t of toasts" class="toast" [class]="'toast-'+t.type">{{ t.msg }}</div>
@@ -351,11 +353,12 @@ import { environment } from '../../../environments/environment';
           <button class="btn btn-primary btn-today" (click)="goToday()">Today</button>
         </div>
         
+        <!-- Note: These summaries reflect the current page's data -->
         <div class="pills">
-          <span class="pill pill-b">📦 {{ sales.length }} Sales</span>
-          <span class="pill pill-g">✅ {{ paidCount }} Paid</span>
-          <span class="pill pill-r">🔴 {{ unpaidCount }} Unpaid</span>
-          <span class="pill pill-p">💰 ₹{{ totalRevenue | number:'1.0-0' }}</span>
+          <span class="pill pill-b">📦 {{ totalCount }} Total Sales</span>
+          <span class="pill pill-g">✅ {{ paidCount }} Paid (Page)</span>
+          <span class="pill pill-r">🔴 {{ unpaidCount }} Unpaid (Page)</span>
+          <span class="pill pill-p">💰 ₹{{ totalRevenue | number:'1.0-0' }} (Page)</span>
         </div>
       </div>
 
@@ -378,7 +381,8 @@ import { environment } from '../../../environments/environment';
             </thead>
             <tbody>
               <tr *ngFor="let s of sales; let i=index" class="hover-row" [style.background]="s.isPaid ? '#f8fafc' : '#fffbeb'">
-                <td><span class="rank">{{ i+1 }}</span></td>
+                <!-- Calculate correct sequence number based on page -->
+                <td><span class="rank">{{ (page - 1) * pageSize + i + 1 }}</span></td>
                 <td>
                   <div class="cname">{{ s.customer?.name || 'Unknown Customer' }}</div>
                   <div class="csub">{{ s.customer?.phone }}</div>
@@ -407,6 +411,16 @@ import { environment } from '../../../environments/environment';
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination Component Rendered Here -->
+        <div class="pagination-wrapper" *ngIf="!loading && totalPages > 1">
+          <app-pagination 
+            [currentPage]="page" 
+            [totalPages]="totalPages" 
+            [totalCount]="totalCount"
+            (pageChange)="onPageChange($event)">
+          </app-pagination>
         </div>
       </div>
     </div>
@@ -566,6 +580,15 @@ import { environment } from '../../../environments/environment';
     
     .state-msg { padding: 3rem 1rem; font-weight: 500; font-size: 0.95rem; text-align: center; color: #64748b; }
 
+    /* Pagination */
+    .pagination-wrapper {
+      padding: 1rem 1rem 0 1rem;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 0.5rem;
+    }
+
     /* Modal Form */
     .overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.6); backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
     .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 520px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
@@ -602,13 +625,6 @@ import { environment } from '../../../environments/environment';
     .error-msg { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 
     .modal-foot { display: flex; justify-content: flex-end; gap: 0.75rem; padding: 1.25rem 1.5rem; border-top: 1px solid #e2e8f0; background: #f8fafc; border-radius: 0 0 16px 16px; }
-
-    /* Toasts */
-    .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; }
-    .toast { padding: 0.75rem 1.25rem; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-    .toast-success { background: #10b981; border: 1px solid #059669; }
-    .toast-error { background: #ef4444; border: 1px solid #b91c1c; }
 
     /* =========================================================
        EXTREME RESPONSIVENESS (Phones & Galaxy Fold)
@@ -662,6 +678,12 @@ export class DailyReportComponent implements OnInit {
   selectedDate = new Date();
   toasts: { msg: string; type: string }[] = [];
 
+  // Pagination State
+  page = 1;
+  pageSize = 10;
+  totalCount = 0;
+  totalPages = 0;
+
   editSale: any = null;
   editItems: { productId: number; quantity: number }[] = [];
   editIsPaid = false;
@@ -670,6 +692,9 @@ export class DailyReportComponent implements OnInit {
   editError = '';
 
   get dateStr() { return this.fmt(this.selectedDate); }
+  
+  // Note: These calculations reflect the data on the CURRENT PAGE only, 
+  // unless the backend API provides full-day totals separately.
   get paidCount()    { return this.sales.filter(s => s.isPaid).length; }
   get unpaidCount()  { return this.sales.filter(s => !s.isPaid).length; }
   get totalRevenue() { return this.sales.reduce((sum, s) => sum + s.totalAmount, 0); }
@@ -689,29 +714,50 @@ export class DailyReportComponent implements OnInit {
 
   loadSales() {
     this.loading = true;
-    this.http.get<any[]>(`${environment.apiUrl}/DailySale/date/${this.dateStr}`).subscribe({
-      next: res => { this.sales = res; this.loading = false; },
-      error: () => { this.loading = false; this.toast('Failed to load sales data', 'error'); }
+    // Updated API call to include pagination query parameters
+    this.http.get<any>(`${environment.apiUrl}/DailySale/date/${this.dateStr}?page=${this.page}&pageSize=${this.pageSize}`).subscribe({
+      next: (res) => { 
+        // Mapping paginated server response
+        this.sales = res.data || []; 
+        this.totalCount = res.totalCount || 0;
+        this.totalPages = res.totalPages || 0;
+        this.loading = false; 
+      },
+      error: () => { 
+        this.loading = false; 
+        this.toast('Failed to load sales data', 'error'); 
+      }
     });
   }
 
+  // Pagination Event
+  onPageChange(p: number) {
+    this.page = p;
+    this.loadSales();
+  }
+
+  // Date changes reset pagination to page 1
   onDateChange(e: any) { 
     this.selectedDate = new Date(e.target.value); 
+    this.page = 1;
     this.loadSales(); 
   }
   
   prevDay() { 
     this.selectedDate = new Date(this.selectedDate.getTime() - 86400000); 
+    this.page = 1;
     this.loadSales(); 
   }
   
   nextDay() { 
     this.selectedDate = new Date(this.selectedDate.getTime() + 86400000); 
+    this.page = 1;
     this.loadSales(); 
   }
   
   goToday() { 
     this.selectedDate = new Date(); 
+    this.page = 1;
     this.loadSales(); 
   }
 
@@ -743,8 +789,7 @@ export class DailyReportComponent implements OnInit {
     this.editItems   = s.items.map((i: any) => ({ productId: i.productId, quantity: i.quantity }));
     this.editError   = '';
     
-    // Lock body scrolling when modal is open
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden'; // Lock body scrolling
   }
 
   closeEdit() { 
