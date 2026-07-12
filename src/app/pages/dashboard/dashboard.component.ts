@@ -386,7 +386,23 @@ interface Dashboard {
     .save-btn { padding: 0.6rem 1.5rem; background: #0891b2; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 600; box-shadow: 0 2px 4px rgba(8,145,178,0.2); }
     .save-btn:hover:not(:disabled) { background: #0e7490; transform: translateY(-1px); }
     .save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* Quick Sale Modal - same scroll behavior as Edit Modal */
+.quick-modal { 
+  background: #fff; 
+  border-radius: 16px; 
+  width: 100%; 
+  max-width: 520px; 
+  max-height: 90vh; 
+  display: flex; 
+  flex-direction: column; 
+  box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); 
+}
 
+.quick-modal .modal-body { 
+  overflow-y: auto; 
+  flex-grow: 1; 
+  -webkit-overflow-scrolling: touch; 
+}
     @media (max-width: 640px) {
       :host { padding: 0.5rem; }
       .stats { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; }
@@ -397,6 +413,9 @@ interface Dashboard {
         font-size: 0.75rem !important;
       }
     }
+    @media (max-width: 600px) {
+  .quick-modal { max-height: 85vh; }
+}
   `]
 })
 export class DashboardComponent implements OnInit {
