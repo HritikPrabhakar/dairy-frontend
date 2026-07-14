@@ -477,13 +477,20 @@ export class DashboardComponent implements OnInit {
   }
 
   loadCustomers() {
-    this.http.get<any[]>(`${environment.apiUrl}/Customer`).subscribe({
-      next: (res) => { 
-        this.allCustomers = res; 
-        this.filteredCustomers = res; 
+  this.http
+    .get<any>(`${environment.apiUrl}/Customer?page=1&pageSize=1000`)
+    .subscribe({
+      next: (res) => {
+        this.allCustomers = res.data || [];
+        this.filteredCustomers = [...this.allCustomers];
+      },
+      error: (err) => {
+        console.error('Failed to load customers', err);
+        this.allCustomers = [];
+        this.filteredCustomers = [];
       }
     });
-  }
+}
 
   loadProducts() {
     this.http.get<any[]>(`${environment.apiUrl}/Product`).subscribe({
